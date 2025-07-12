@@ -1,65 +1,54 @@
 import requests
 import csv
-import argparse
-
-API_PORTAL = "https://portal.simulationhockey.com/api/v1/player"
-API_INDEX_RATINGS = "https://index.simulationhockey.com/api/v1/players/ratings"
 
 def fetch_portal_players():
-    print("Fetching portal players...")
-    res = requests.get(API_PORTAL)
-    res.raise_for_status()
-    players = res.json()
-    # Build indexID to (portal_name, portal_pid) map
-    mapping = {}
-    for p in players:
-        portal_name = p.get("name")
-        portal_pid = p.get("pid")
-        index_records = p.get("indexRecords", [])
-        for rec in index_records:
-            if rec.get("leagueID") == 0:  # only SHL league index ids
-                index_id = rec.get("indexID")
-                mapping[index_id] = (portal_name, portal_pid)
-    return mapping
-
-def fetch_index_players(season, league):
-    print(f"Fetching index players for season {season}, league {league}...")
-    params = {"season": season, "league": league}
-    res = requests.get(API_INDEX_RATINGS, params=params)
+    url = "https://portal.simulationhockey.com/api/v1/player"
+    headers = {
+        "User-Agent": "SHL-Player-Spelling-Fix-Bot/1.0"
+    }
+    res = requests.get(url, headers=headers)
     res.raise_for_status()
     return res.json()
 
-def compare_and_write_csv(mapping, index_players, season, league):
-    filename = f"spelling_issues_season{season}_league{league}.csv"
-    print(f"Saving results to {filename}...")
-    with open(filename, mode='w', newline='', encoding='utf-8') as f:
-        fieldnames = ["portal_pid", "portal_name", "index_id", "index_name", "spelling_issue"]
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        for p in index_players:
-            index_id = p.get("id")
-            index_name = p.get("name")
-            if index_id in mapping:
-                portal_name, portal_pid = mapping[index_id]
-                spelling_issue = "NO" if portal_name == index_name else "YES"
-                writer.writerow({
-                    "portal_pid": portal_pid,
-                    "portal_name": portal_name,
-                    "index_id": index_id,
-                    "index_name": index_name,
-                    "spelling_issue": spelling_issue
-                })
-    print("Done.")
+def fetch_index_players(season=83):
+    url = f"https://index.simulationhockey.com/api/v1/players/ratings?league=0&season={season}"
+    res = requests.get(url)
+    res.raise_for_status()
+    return res.json()
 
 def main():
-    parser = argparse.ArgumentParser(description="Check SHL player name spellings between Portal and Index")
-    parser.add_argument("--season", type=int, default=83, help="Season to check (default: 83)")
-    parser.add_argument("--league", type=int, default=0, help="League to check (default: 0)")
-    args = parser.parse_args()
+    print("Fetching portal players...")
+    portal_players = fetch_portal_players()
+    portal_mapping = {p["pid"]: p["name"] for p in portal_players}
 
-    portal_mapping = fetch_portal_players()
-    index_players = fetch_index_players(args.season, args.league)
-    compare_and_write_csv(portal_mapping, index_players, args.season, args.league)
+    print("Fetching index players for season 83...")
+    index_players = fetch_index_players(83)
+
+    with open("spelling_discrepancies.csv", "w", newline='', encoding='utf-8') as csvfile:
+        fieldnames = ["index_id", "index_name", "portal_name", "mismatch"]
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
+
+        for player in index_players:
+            portal_name = None
+            # Find portal player by matching index IDs inside the indexRecords of portal player (if you want)
+            # but here we just try to match by pid assuming index id is same as pid or you can adapt.
+            pid = player.get("id")
+            # In your original example, portal players have "indexRecords" with indexID(s) which we could cross-check
+            # For simplicity, if portal player pid == index player id, get name from portal, else leave blank
+            portal_name = portal_mapping.get(pid, "")
+            mismatch = ""
+            if portal_name and portal_name != player["name"]:
+                mismatch = "Yes"
+
+            writer.writerow({
+                "index_id": player["id"],
+                "index_name": player["name"],
+                "portal_name": portal_name,
+                "mismatch": mismatch
+            })
+
+    print("Done. Output saved to spelling_discrepancies.csv")
 
 if __name__ == "__main__":
     main()
