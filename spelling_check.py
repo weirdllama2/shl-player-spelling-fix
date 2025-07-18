@@ -1,12 +1,16 @@
-import json
+import requests
 import csv
 import re
 
-PORTAL_PLAYERS_FILE = "players.json"
-INDEX_PLAYERS_FILE = "index_players.json"
+# API endpoints
+PORTAL_PLAYERS_API = "https://portal.simulationhockey.com/api/v1/players"
+INDEX_PLAYERS_API = "https://index.simulationhockey.com/api/v1/players"
+
+# Output file
 OUTPUT_CSV_FILE = "spelling_mismatches.csv"
 
 def normalize_for_comparison(name: str) -> str:
+    """Normalize a name string to make comparison more reliable (ignore punctuation, capitalization, etc.)"""
     if not name:
         return ""
     name = name.lower()
@@ -15,11 +19,17 @@ def normalize_for_comparison(name: str) -> str:
     name = re.sub(r"\s+", " ", name).strip()
     return name
 
-def load_json_file(filepath):
-    with open(filepath, "r", encoding="utf-8") as f:
-        return json.load(f)
+def fetch_json_from_api(url):
+    """Fetch and parse JSON data from the given API URL."""
+    print(f"Fetching: {url}")
+    response = requests.get(url)
+    if response.status_code != 200:
+        print(f"❌ Error: Got {response.status_code} from {url}")
+        response.raise_for_status()
+    return response.json()
 
 def build_portal_mapping(portal_players):
+    """Create a mapping from Index ID to player name using SHL (leagueID = 0) data."""
     mapping = {}
     for player in portal_players:
         index_records = player.get("indexRecords") or []
@@ -29,14 +39,18 @@ def build_portal_mapping(portal_players):
     return mapping
 
 def main():
-    print("Loading portal players...")
-    portal_players = load_json_file(PORTAL_PLAYERS_FILE)
+    # Step 1: Fetch players from the portal
+    print("📡 Fetching portal players...")
+    portal_players = fetch_json_from_api(PORTAL_PLAYERS_API)
 
-    print("Loading index players...")
-    index_players = load_json_file(INDEX_PLAYERS_FILE)
+    # Step 2: Fetch players from the index
+    print("📡 Fetching index players...")
+    index_players = fetch_json_from_api(INDEX_PLAYERS_API)
 
+    # Step 3: Build mapping of index ID → portal name
     portal_mapping = build_portal_mapping(portal_players)
 
+    # Step 4: Compare names and collect mismatches
     rows = []
     header = ["Index ID", "Portal Name", "Index Name", "Mismatch"]
 
@@ -46,7 +60,7 @@ def main():
         portal_name = portal_mapping.get(index_id)
 
         if not portal_name:
-            continue  # Ignore missing portal records
+            continue  # Skip players not present in portal
 
         index_norm = normalize_for_comparison(index_name)
         portal_norm = normalize_for_comparison(portal_name)
@@ -54,6 +68,7 @@ def main():
         if index_norm != portal_norm:
             rows.append([index_id, portal_name, index_name, "Mismatch"])
 
+    # Step 5: Write results to CSV
     with open(OUTPUT_CSV_FILE, "w", newline="", encoding="utf-8") as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(header)
