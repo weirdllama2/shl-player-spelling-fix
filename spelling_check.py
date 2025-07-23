@@ -4,7 +4,7 @@ import re
 
 # --- Config
 SEASON = 83  # Change this once per season
-PORTAL_PLAYERS_URL = "https://portal.simulationhockey.com/api/v1/players"
+PORTAL_PLAYERS_URL = "https://portal.simulationhockey.com/api/v1/player"
 INDEX_API_URL = f"https://index.simulationhockey.com/api/v1/players/ratings?season={SEASON}"
 OUTPUT_CSV_FILE = "spelling_mismatches.csv"
 
