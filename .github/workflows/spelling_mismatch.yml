@@ -1,0 +1,34 @@
+name: Check Player Name Spelling
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  spelling-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run spelling check script
+        run: python3 spelling_check.py
+
+      - name: Commit and push CSV results
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add spelling_mismatches.csv
+          git commit -m "Update spelling issues report [force]" --allow-empty
+          git push
